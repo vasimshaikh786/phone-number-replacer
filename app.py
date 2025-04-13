@@ -39,21 +39,19 @@ if uploaded_file:
 
         selected_number = st.selectbox("Select the phone number to replace", phone_numbers)
         new_number = st.text_input("Enter the new number to insert")
-
-        # New UI Controls
         font_size_input = st.slider("Font Size", min_value=10, max_value=100, value=30)
-        text_color = st.color_picker("Pick Text Color", "#000000")  # Default to black
+        text_color = st.color_picker("Pick Text Color", "#000000")
 
-        if st.button("Replace Number"):
+        preview_image = image.copy()
+
+        if selected_number and new_number:
             for number, x, y, w, h in boxes:
                 if number == selected_number:
-                    # Inpaint area
-                    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                    mask = np.zeros(preview_image.shape[:2], dtype=np.uint8)
                     cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
-                    image = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
+                    preview_image = cv2.inpaint(preview_image, mask, 3, cv2.INPAINT_TELEA)
 
-                    # Draw new number
-                    image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+                    image_pil = Image.fromarray(cv2.cvtColor(preview_image, cv2.COLOR_BGR2RGB))
                     draw = ImageDraw.Draw(image_pil)
 
                     try:
@@ -61,20 +59,14 @@ if uploaded_file:
                     except:
                         font = ImageFont.load_default()
 
-                    # Convert hex to RGB tuple
                     color_rgb = tuple(int(text_color[i:i+2], 16) for i in (1, 3, 5))
-
                     draw.text((x, y), new_number, fill=color_rgb, font=font)
-                    image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
+
+                    preview_image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
                     break
 
-            st.success("Phone number replaced successfully!")
-            st.image(image, caption="Updated Image", use_column_width=True)
+        st.image(preview_image, caption="🔁 Live Preview", use_column_width=True)
 
-            _, buffer = cv2.imencode(".png", image)
-            st.download_button(
-                "📥 Download Updated Image",
-                buffer.tobytes(),
-                "updated_image.png",
-                "image/png"
-            )
+        if st.button("✅ Apply and Download"):
+            _, buffer = cv2.imencode(".png", preview_image)
+            st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
