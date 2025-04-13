@@ -63,7 +63,9 @@ if uploaded_file:
                     try:
                         while font_size < 200:
                             font = ImageFont.truetype(font_path, font_size)
-                            text_width, text_height = draw.textsize(new_number, font=font)
+                            text_bbox = font.getbbox(new_number)
+                            text_width = text_bbox[2] - text_bbox[0]
+                            text_height = text_bbox[3] - text_bbox[1]
                             if text_width >= w or text_height > h * 1.5:
                                 font_size -= 1
                                 break
@@ -71,9 +73,9 @@ if uploaded_file:
                         font = ImageFont.truetype(font_path, font_size)
                     except:
                         font = ImageFont.load_default()
+                        text_width, text_height = font.getsize(new_number)
 
                     # 5. Center text vertically in the box
-                    text_width, text_height = draw.textsize(new_number, font=font)
                     text_x = x
                     text_y = y + (h - text_height) // 2
 
@@ -83,3 +85,9 @@ if uploaded_file:
                     # 7. Convert back to OpenCV
                     image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
                     break
+
+            st.success("Phone number replaced successfully!")
+            st.image(image, caption="Updated Image", use_container_width=True)
+
+            _, buffer = cv2.imencode(".png", image)
+            st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
