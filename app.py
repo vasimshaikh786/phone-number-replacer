@@ -41,7 +41,7 @@ if uploaded_file:
         selected_number = st.selectbox("Select the phone number to replace", phone_numbers)
         new_number = st.text_input("Enter the new number to insert")
 
-        if st.button("Replace Number"):
+    if st.button("Replace Number"):
     for number, x, y, w, h in boxes:
         if number == selected_number:
             # 1. Inpaint the number area
