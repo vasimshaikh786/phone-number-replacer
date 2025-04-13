@@ -74,3 +74,4 @@ if uploaded_file:
 
     _, buffer = cv2.imencode(".png", image)
     st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
+
