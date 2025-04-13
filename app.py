@@ -42,28 +42,33 @@ if uploaded_file:
         new_number = st.text_input("Enter the new number to insert")
 
         if st.button("Replace Number"):
-            for number, x, y, w, h in boxes:
-                if number == selected_number:
-                    # Inpaint area
-                    mask = np.zeros(image.shape[:2], dtype=np.uint8)
-                    cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
-                    image = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
+    for number, x, y, w, h in boxes:
+        if number == selected_number:
+            # 1. Inpaint area
+            mask = np.zeros(image.shape[:2], dtype=np.uint8)
+            cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
+            image = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
 
-                    # Draw new number
-                    image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-                    draw = ImageDraw.Draw(image_pil)
+            # 2. Get original text color
+            roi = image[y:y+h, x:x+w]
+            avg_color = tuple(int(np.mean(roi[:, :, c])) for c in range(3))
 
-                    try:
-                        font = ImageFont.truetype("arial.ttf", size=int(h * 1.2))
-                    except:
-                        font = ImageFont.load_default()
+            # 3. Draw new number
+            image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+            draw = ImageDraw.Draw(image_pil)
 
-                    draw.text((x, y), new_number, fill=(0, 0, 0), font=font)
-                    image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
-                    break
+            try:
+                font_size = int(h * 1.3)
+                font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+            except:
+                font = ImageFont.load_default()
 
-            st.success("Phone number replaced successfully!")
-            st.image(image, caption="Updated Image", use_column_width=True)
+            draw.text((x, y), new_number, fill=avg_color, font=font)
+            image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
+            break
 
-            _, buffer = cv2.imencode(".png", image)
-            st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
+    st.success("Phone number replaced successfully!")
+    st.image(image, caption="Updated Image", use_container_width=True)
+
+    _, buffer = cv2.imencode(".png", image)
+    st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
