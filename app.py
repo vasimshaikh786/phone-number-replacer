@@ -5,14 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import re
 
-st.set_page_config(page_title="📞 AI Phone Number Replacer", layout="centered")
-st.markdown("""
-    <style>
-        .stApp { background-color: #f5f7fa; }
-        h1 { color: #1f77b4; }
-    </style>
-""", unsafe_allow_html=True)
-
+st.set_page_config(page_title="Phone Number Replacer", layout="centered")
 st.title("📞 AI Phone Number Replacer in Image")
 
 uploaded_file = st.file_uploader("Upload an image (JPG, PNG)", type=["jpg", "jpeg", "png"])
@@ -20,7 +13,6 @@ uploaded_file = st.file_uploader("Upload an image (JPG, PNG)", type=["jpg", "jpe
 if uploaded_file:
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     image = cv2.imdecode(file_bytes, 1)
-    original_image = image.copy()
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT)
@@ -31,53 +23,52 @@ if uploaded_file:
 
     for i, text in enumerate(data['text']):
         if pattern.fullmatch(text.strip()):
-            phone_numbers.append(text)
+            phone_numbers.append(text.strip())
             boxes.append((
-                text,
+                text.strip(),
                 data['left'][i],
                 data['top'][i],
                 data['width'][i],
                 data['height'][i]
             ))
 
-    if not phone_numbers:
-        st.warning("No phone numbers detected.")
-    else:
+    if phone_numbers:
         st.image(image, caption="Original Image", use_column_width=True)
 
         selected_number = st.selectbox("Select the phone number to replace", phone_numbers)
-        new_number = st.text_input("Enter the new number")
-        font_size = st.slider("Font Size", min_value=10, max_value=100, value=20)
-        text_color = st.color_picker("Text Color", value="#000000")
+        new_number = st.text_input("Enter the new number to insert", value=selected_number)
+        font_size_input = st.slider("Font Size", min_value=10, max_value=100, value=30)
+        text_color = st.color_picker("Pick Text Color", "#000000")
 
-        if new_number:
-            preview_image = original_image.copy()
+        # Create a preview copy of the image
+        preview_image = image.copy()
 
-            for number, x, y, w, h in boxes:
-                if number == selected_number:
-                    # Inpaint
-                    mask = np.zeros(preview_image.shape[:2], dtype=np.uint8)
-                    cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
-                    preview_image = cv2.inpaint(preview_image, mask, 3, cv2.INPAINT_TELEA)
+        for number, x, y, w, h in boxes:
+            if number == selected_number:
+                mask = np.zeros(preview_image.shape[:2], dtype=np.uint8)
+                cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
+                preview_image = cv2.inpaint(preview_image, mask, 3, cv2.INPAINT_TELEA)
 
-                    # Draw with updated style
-                    image_pil = Image.fromarray(cv2.cvtColor(preview_image, cv2.COLOR_BGR2RGB))
-                    draw = ImageDraw.Draw(image_pil)
-                    try:
-                        font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
-                    except:
-                        font = ImageFont.load_default()
+                image_pil = Image.fromarray(cv2.cvtColor(preview_image, cv2.COLOR_BGR2RGB))
+                draw = ImageDraw.Draw(image_pil)
 
-                    text_rgb = tuple(int(text_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-                    draw.text((x, y), new_number, fill=text_rgb, font=font)
-                    preview_image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
-                    break
+                try:
+                    font = ImageFont.truetype("arial.ttf", size=font_size_input)
+                except:
+                    font = ImageFont.load_default()
 
-            st.image(preview_image, caption="Live Preview", use_column_width=True)
+                color_rgb = tuple(int(text_color[i:i+2], 16) for i in (1, 3, 5))
+                draw.text((x, y), new_number, fill=color_rgb, font=font)
 
-            if st.button("✅ Apply and Download"):
-                image = preview_image
-                st.success("Phone number replaced successfully!")
-                st.image(image, caption="Updated Image", use_column_width=True)
-                _, buffer = cv2.imencode(".png", image)
-                st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
+                preview_image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
+                break
+
+        st.image(preview_image, caption="🔁 Live Preview", use_column_width=True)
+
+        if st.button("✅ Apply and Download"):
+            _, buffer = cv2.imencode(".png", preview_image)
+            st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
+    else:
+        st.warning("No phone numbers were detected in the image.")
+else:
+    st.info("Please upload an image to begin.")
