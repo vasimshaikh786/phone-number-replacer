@@ -41,37 +41,36 @@ if uploaded_file:
         selected_number = st.selectbox("Select the phone number to replace", phone_numbers)
         new_number = st.text_input("Enter the new number to insert")
 
-     if st.button("Replace Number"):
-    for number, x, y, w, h in boxes:
-        if number == selected_number:
-            # 1. Inpaint the number area
-            mask = np.zeros(image.shape[:2], dtype=np.uint8)
-            cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
-            image = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
+        if st.button("Replace Number"):
+            for number, x, y, w, h in boxes:
+                if number == selected_number:
+                    # 1. Inpaint the number area
+                    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                    cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
+                    image = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
 
-            # 2. Get average color from the original number region
-            roi = image[y:y+h, x:x+w]
-            avg_color = tuple(int(np.mean(roi[:, :, c])) for c in range(3))
+                    # 2. Get average color from the original number region
+                    roi = image[y:y+h, x:x+w]
+                    avg_color = tuple(int(np.mean(roi[:, :, c])) for c in range(3))
 
-            # 3. Draw the new number using PIL
-            image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-            draw = ImageDraw.Draw(image_pil)
+                    # 3. Draw the new number using PIL
+                    image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+                    draw = ImageDraw.Draw(image_pil)
 
-            try:
-                font_size = int(h * 1.3)
-                font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
-            except:
-                font = ImageFont.load_default()
+                    try:
+                        font_size = int(h * 1.3)
+                        font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+                    except:
+                        font = ImageFont.load_default()
 
-            draw.text((x, y), new_number, fill=avg_color, font=font)
+                    draw.text((x, y), new_number, fill=avg_color, font=font)
 
-            # 4. Convert back to OpenCV image
-            image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
-            break
+                    # 4. Convert back to OpenCV image
+                    image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
+                    break
 
-    st.success("Phone number replaced successfully!")
-    st.image(image, caption="Updated Image", use_container_width=True)
+            st.success("Phone number replaced successfully!")
+            st.image(image, caption="Updated Image", use_container_width=True)
 
-    _, buffer = cv2.imencode(".png", image)
-    st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
-
+            _, buffer = cv2.imencode(".png", image)
+            st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
