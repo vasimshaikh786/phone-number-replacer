@@ -17,7 +17,6 @@ if uploaded_file:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT)
 
-    # Enhanced phone number detection
     pattern = re.compile(r'(\+?\(?\d{1,4}\)?[\s.-]?\d{2,5}[\s.-]?\d{4,6})')
     phone_numbers = []
     boxes = []
@@ -41,6 +40,10 @@ if uploaded_file:
         selected_number = st.selectbox("Select the phone number to replace", phone_numbers)
         new_number = st.text_input("Enter the new number to insert")
 
+        # New UI Controls
+        font_size_input = st.slider("Font Size", min_value=10, max_value=100, value=30)
+        text_color = st.color_picker("Pick Text Color", "#000000")  # Default to black
+
         if st.button("Replace Number"):
             for number, x, y, w, h in boxes:
                 if number == selected_number:
@@ -54,11 +57,14 @@ if uploaded_file:
                     draw = ImageDraw.Draw(image_pil)
 
                     try:
-                        font = ImageFont.truetype("arial.ttf", size=int(h * 1.2))
+                        font = ImageFont.truetype("arial.ttf", size=font_size_input)
                     except:
                         font = ImageFont.load_default()
 
-                    draw.text((x, y), new_number, fill=(0, 0, 0), font=font)
+                    # Convert hex to RGB tuple
+                    color_rgb = tuple(int(text_color[i:i+2], 16) for i in (1, 3, 5))
+
+                    draw.text((x, y), new_number, fill=color_rgb, font=font)
                     image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
                     break
 
