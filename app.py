@@ -44,50 +44,31 @@ if uploaded_file:
         if st.button("Replace Number"):
             for number, x, y, w, h in boxes:
                 if number == selected_number:
-                    # 1. Inpaint the number area
+                    # Inpaint area
                     mask = np.zeros(image.shape[:2], dtype=np.uint8)
                     cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
                     image = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
 
-                    # 2. Get average background color
-                    roi = image[y:y+h, x:x+w]
-                    avg_color = tuple(int(np.mean(roi[:, :, c])) for c in range(3))
-
-                    # 3. Convert to PIL image
+                    # Draw new number
                     image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
                     draw = ImageDraw.Draw(image_pil)
 
-                    # 4. Dynamically choose font size to fit the width
-                    font_path = "DejaVuSans-Bold.ttf"
-                    font_size = h
                     try:
-                        while font_size < 200:
-                            font = ImageFont.truetype(font_path, font_size)
-                            text_bbox = font.getbbox(new_number)
-                            text_width = text_bbox[2] - text_bbox[0]
-                            text_height = text_bbox[3] - text_bbox[1]
-                            if text_width >= w or text_height > h * 1.5:
-                                font_size -= 1
-                                break
-                            font_size += 1
-                        font = ImageFont.truetype(font_path, font_size)
+                        font = ImageFont.truetype("arial.ttf", size=int(h * 1.2))
                     except:
                         font = ImageFont.load_default()
-                        text_width, text_height = font.getsize(new_number)
 
-                    # 5. Center text vertically in the box
-                    text_x = x
-                    text_y = y + (h - text_height) // 2
-
-                    # 6. Draw text
-                    draw.text((text_x, text_y), new_number, fill=avg_color, font=font)
-
-                    # 7. Convert back to OpenCV
+                    draw.text((x, y), new_number, fill=(0, 0, 0), font=font)
                     image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
                     break
 
             st.success("Phone number replaced successfully!")
-            st.image(image, caption="Updated Image", use_container_width=True)
+            st.image(image, caption="Updated Image", use_column_width=True)
 
             _, buffer = cv2.imencode(".png", image)
-            st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
+            st.download_button(
+                "📥 Download Updated Image",
+                buffer.tobytes(),
+                "updated_image.png",
+                "image/png"
+            )
