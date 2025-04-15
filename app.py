@@ -28,9 +28,9 @@ def preprocess_image(image_cv):
 def get_text_data(image):
     data_results = []
     configs = [
-        '--oem 3 --psm 6',  # Assume a single uniform block of text
-        '--oem 3 --psm 11', # Sparse text
-        '--oem 3 --psm 3',  # Treat the image as a single text line
+        '--oem 3 --psm 6',
+        '--oem 3 --psm 11',
+        '--oem 3 --psm 3',
     ]
     for config in configs:
         data = pytesseract.image_to_data(image, config=config, output_type=pytesseract.Output.DICT)
@@ -39,7 +39,7 @@ def get_text_data(image):
     return data_results[0] if data_results else None
 
 def extract_numbers(data):
-    # Universal phone number pattern
+    # Enhanced universal phone number pattern including +1 (XXX) XXX-XXXX format
     pattern = re.compile(r'(\+?\d{0,4}[\s.-]?[\(]?\d{1,5}[\)]?[\s.-]?\d{2,6}[\s.-]?\d{2,6}[\s.-]?\d{0,6})')
     numbers = []
     boxes = []
@@ -61,9 +61,15 @@ def get_font_metrics(image_cv, x, y, w, h):
     gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
     roi = gray[y:y+h, x:x+w]
     mean_val = np.mean(roi)
-    font_size = max(10, int(h * 0.8))
+    font_size = max(10, int(h * 0.8))  # Maintain original height proportion
     font_color = (255, 255, 255) if mean_val < 128 else (0, 0, 0)
     return font_size, font_color
+
+def format_number(original, new):
+    # Preserve the original format
+    if re.match(r'\+1\s\(\d{3}\)\s\d{3}-\d{4}', original):
+        return f"+1 ({new[:3]}) {new[3:6]}-{new[6:]}"
+    return new
 
 if uploaded_file:
     try:
@@ -83,7 +89,8 @@ if uploaded_file:
         if phone_numbers:
             st.image(cv_image, caption="Original Image", use_column_width=True)
             selected_number = st.selectbox("Select phone number to replace", phone_numbers)
-            new_number = st.text_input("Enter new number", value=selected_number)
+            new_number_raw = st.text_input("Enter new number (10 digits)", value=selected_number.replace(' ', '').replace('-', '').replace('(', '').replace(')', ''))
+            new_number = format_number(selected_number, new_number_raw.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')[:10])
 
             preview = cv_image.copy()
             for box in boxes:
