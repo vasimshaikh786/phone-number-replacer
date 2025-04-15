@@ -12,38 +12,34 @@ uploaded_file = st.file_uploader("Upload an image (JPG, PNG)", type=["jpg", "jpe
 
 def get_average_color(image, x, y, w, h):
     roi = image[y:y+h, x:x+w]
-    avg_color = cv2.mean(roi)[:3]  # BGR
-    return tuple(int(c) for c in avg_color[::-1])  # convert to RGB
+    avg_color = cv2.mean(roi)[:3]
+    return tuple(int(c) for c in avg_color[::-1])
 
-def clean_image(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (1, 1), 0)
-    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                   cv2.THRESH_BINARY_INV, 15, 10)
-    return thresh
-
-# Extended regex for many number formats
-phone_pattern = re.compile(r'\+?\(?\d{1,4}\)?[\s\-\.]?\d{1,5}[\s\-\.]?\d{2,5}[\s\-\.]?\d{2,5}')
+# Accepts a wide range of formats like:
+# 0123 456 789 | +91-1234567890 | (0123) 456-789 | etc.
+phone_pattern = re.compile(r'(\+?\(?\d{1,4}\)?[\s\-\.]?\d{2,5}[\s\-\.]?\d{2,5}[\s\-\.]?\d{0,5})')
 
 if uploaded_file:
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     image = cv2.imdecode(file_bytes, 1)
 
-    processed = clean_image(image)
+    # Convert image to RGB for PIL and better OCR compatibility
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(rgb)
 
-    # More accurate config for OCR
-    custom_config = r'--oem 3 --psm 6'
-    data = pytesseract.image_to_data(processed, output_type=pytesseract.Output.DICT, config=custom_config)
+    # Use Tesseract to extract full text with bounding boxes
+    custom_config = r'--oem 3 --psm 11'
+    data = pytesseract.image_to_data(pil_image, output_type=pytesseract.Output.DICT, config=custom_config)
 
     phone_numbers = []
     boxes = []
 
     for i, text in enumerate(data['text']):
-        text_clean = text.strip()
-        if phone_pattern.fullmatch(text_clean):
-            phone_numbers.append(text_clean)
+        if phone_pattern.search(text.strip()):
+            number = phone_pattern.search(text.strip()).group()
+            phone_numbers.append(number)
             boxes.append((
-                text_clean,
+                number,
                 data['left'][i],
                 data['top'][i],
                 data['width'][i],
@@ -60,19 +56,18 @@ if uploaded_file:
 
         for number, x, y, w, h in boxes:
             if number == selected_number:
-                # Inpaint old number
                 mask = np.zeros(preview_image.shape[:2], dtype=np.uint8)
                 cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
                 preview_image = cv2.inpaint(preview_image, mask, 3, cv2.INPAINT_TELEA)
 
                 avg_color = get_average_color(image, x, y, w, h)
-                estimated_font_size = int(h * 1.6)
+                font_size = int(h * 1.5)
 
                 image_pil = Image.fromarray(cv2.cvtColor(preview_image, cv2.COLOR_BGR2RGB))
                 draw = ImageDraw.Draw(image_pil)
 
                 try:
-                    font = ImageFont.truetype("arial.ttf", estimated_font_size)
+                    font = ImageFont.truetype("arial.ttf", font_size)
                 except:
                     font = ImageFont.load_default()
 
@@ -87,6 +82,6 @@ if uploaded_file:
             _, buffer = cv2.imencode(".png", preview_image)
             st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
     else:
-        st.warning("No phone numbers were detected. Try another image or a clearer version.")
+        st.warning("No phone numbers were detected. Try adjusting the font/background contrast or try another image.")
 else:
     st.info("Please upload an image to begin.")
