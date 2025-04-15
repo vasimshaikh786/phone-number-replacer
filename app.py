@@ -6,7 +6,7 @@ import numpy as np
 import re
 
 st.set_page_config(page_title="Phone Number Replacer", layout="centered")
-st.title("📞 AI Phone Number Replacer in Image")
+st.title("\ud83d\udcde AI Phone Number Replacer in Image")
 
 uploaded_file = st.file_uploader("Upload an image (JPG, PNG)", type=["jpg", "jpeg", "png"])
 
@@ -37,37 +37,63 @@ if uploaded_file:
 
         selected_number = st.selectbox("Select the phone number to replace", phone_numbers)
         new_number = st.text_input("Enter the new number to insert", value=selected_number)
-        font_size_input = st.slider("Font Size", min_value=10, max_value=100, value=30)
-        text_color = st.color_picker("Pick Text Color", "#000000")
+        auto_match = st.checkbox("Auto match font size and color", value=True)
 
-        # Create a preview copy of the image
+        font_size_input = st.slider("Font Size", min_value=10, max_value=100, value=30, disabled=auto_match)
+        text_color = st.color_picker("Pick Text Color", "#000000", disabled=auto_match)
+
         preview_image = image.copy()
 
         for number, x, y, w, h in boxes:
             if number == selected_number:
+                # Inpaint original text
                 mask = np.zeros(preview_image.shape[:2], dtype=np.uint8)
                 cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
                 preview_image = cv2.inpaint(preview_image, mask, 3, cv2.INPAINT_TELEA)
 
+                # PIL drawing setup
                 image_pil = Image.fromarray(cv2.cvtColor(preview_image, cv2.COLOR_BGR2RGB))
                 draw = ImageDraw.Draw(image_pil)
 
-                try:
-                    font = ImageFont.truetype("arial.ttf", size=font_size_input)
-                except:
-                    font = ImageFont.load_default()
+                if auto_match:
+                    # Auto font size
+                    font_size = int(h * 1.2)
+                    try:
+                        font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+                    except:
+                        font = ImageFont.load_default()
 
-                color_rgb = tuple(int(text_color[i:i+2], 16) for i in (1, 3, 5))
-                draw.text((x, y), new_number, fill=color_rgb, font=font)
+                    # Estimate foreground color
+                    original_region = gray[y:y+h, x:x+w]
+                    _, threshold = cv2.threshold(original_region, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    foreground_mask = cv2.bitwise_not(threshold)
+                    masked_area = cv2.bitwise_and(image[y:y+h, x:x+w], image[y:y+h, x:x+w], mask=foreground_mask)
+                    avg_foreground_color = tuple(
+                        int(np.mean(masked_area[:, :, i][masked_area[:, :, i] > 0])) for i in range(3)
+                    )
+                    color = avg_foreground_color
+                else:
+                    try:
+                        font = ImageFont.truetype("arial.ttf", font_size_input)
+                    except:
+                        font = ImageFont.load_default()
+                    color = tuple(int(text_color[i:i+2], 16) for i in (1, 3, 5))
+
+                # Center text in original bounding box
+                text_width, text_height = draw.textsize(new_number, font=font)
+                text_x = x + (w - text_width) // 2
+                text_y = y + (h - text_height) // 2
+
+                draw.text((text_x, text_y), new_number, fill=color, font=font)
 
                 preview_image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
                 break
 
-        st.image(preview_image, caption="🔁 Live Preview", use_column_width=True)
+        st.image(preview_image, caption="\ud83d\udd01 Live Preview", use_column_width=True)
 
-        if st.button("✅ Apply and Download"):
+        if st.button("\u2705 Apply and Download"):
             _, buffer = cv2.imencode(".png", preview_image)
-            st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
+            st.download_button("\ud83d\udcc5 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
     else:
         st.warning("No phone numbers were detected in the image.")
 else:
