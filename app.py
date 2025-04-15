@@ -106,7 +106,7 @@ if uploaded_file:
                     # Calculate font metrics
                     font_color = get_font_metrics(cv_image, x, y, w, h)
                     
-                    # Draw new number
+                    # Draw new number with updated font size
                     img_pil = Image.fromarray(cv2.cvtColor(preview, cv2.COLOR_BGR2RGB))
                     draw = ImageDraw.Draw(img_pil)
                     try:
