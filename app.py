@@ -39,7 +39,6 @@ def get_text_data(image):
     return data_results[0] if data_results else None
 
 def extract_numbers(data):
-    # Enhanced universal phone number pattern including +1 (XXX) XXX-XXXX format
     pattern = re.compile(r'(\+?\d{0,4}[\s.-]?[\(]?\d{1,5}[\)]?[\s.-]?\d{2,6}[\s.-]?\d{2,6}[\s.-]?\d{0,6})')
     numbers = []
     boxes = []
@@ -61,12 +60,10 @@ def get_font_metrics(image_cv, x, y, w, h):
     gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
     roi = gray[y:y+h, x:x+w]
     mean_val = np.mean(roi)
-    font_size = max(10, int(h * 0.8))  # Maintain original height proportion
     font_color = (255, 255, 255) if mean_val < 128 else (0, 0, 0)
-    return font_size, font_color
+    return font_color
 
 def format_number(original, new):
-    # Preserve the original format
     if re.match(r'\+1\s\(\d{3}\)\s\d{3}-\d{4}', original):
         return f"+1 ({new[:3]}) {new[3:6]}-{new[6:]}"
     return new
@@ -91,6 +88,10 @@ if uploaded_file:
             selected_number = st.selectbox("Select phone number to replace", phone_numbers)
             new_number_raw = st.text_input("Enter new number (10 digits)", value=selected_number.replace(' ', '').replace('-', '').replace('(', '').replace(')', ''))
             new_number = format_number(selected_number, new_number_raw.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')[:10])
+            
+            # Add font size slider
+            default_font_size = max(10, int(boxes[0]['height'] * 0.8))
+            font_size = st.slider("Adjust Font Size", min_value=10, max_value=50, value=default_font_size, step=1)
 
             preview = cv_image.copy()
             for box in boxes:
@@ -103,7 +104,7 @@ if uploaded_file:
                     preview = cv2.inpaint(preview, mask, 3, cv2.INPAINT_TELEA)
 
                     # Calculate font metrics
-                    font_size, font_color = get_font_metrics(cv_image, x, y, w, h)
+                    font_color = get_font_metrics(cv_image, x, y, w, h)
                     
                     # Draw new number
                     img_pil = Image.fromarray(cv2.cvtColor(preview, cv2.COLOR_BGR2RGB))
