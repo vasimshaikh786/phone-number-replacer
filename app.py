@@ -1,103 +1,155 @@
 import streamlit as st
-import cv2
 import pytesseract
-from PIL import Image, ImageEnhance, ImageDraw, ImageFont
-import numpy as np
+import easyocr
+import cv2
 import re
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
-# --- Setup ---
-st.set_page_config(page_title="Phone Number Replacer", layout="centered")
-st.title("AI Phone Number Replacer in Image")
+# Initialize Streamlit
+st.set_page_config(page_title="📞 Smart Phone Number Replacer", layout="centered")
+st.title("📞 AI Smart Phone Number Replacer")
+
+# Helper functions
+
+def load_image(uploaded_file):
+    image = Image.open(uploaded_file).convert('RGB')
+    return image
+
+def detect_with_tesseract(img):
+    img_cv = np.array(img)
+    img_gray = cv2.cvtColor(img_cv, cv2.COLOR_RGB2GRAY)
+    custom_config = r'--oem 3 --psm 6'
+    text = pytesseract.image_to_string(img_gray, config=custom_config)
+    return text
+
+def detect_with_easyocr(img):
+    reader = easyocr.Reader(['en'], gpu=False)
+    img_cv = np.array(img)
+    results = reader.readtext(img_cv)
+    text = " ".join([res[1] for res in results])
+    return text
+
+def extract_phone_numbers(text):
+    phone_regex = re.compile(r'''
+        (\+?\d{1,3}[\s\.\-]?)?        # Country code
+        (\(?\d{2,4}\)?[\s\.\-]?)?     # Area code
+        (\d{2,4}[\s\.\-]?){2,3}       # Main number
+    ''', re.VERBOSE)
+
+    matches = []
+    for match in phone_regex.finditer(text):
+        if match.group().strip():
+            matches.append(match.group().strip())
+    return matches
+
+def match_format(original, new):
+    # Try to preserve special characters spacing etc.
+    formatted = ""
+    digits = re.sub(r'\D', '', new)
+    digit_idx = 0
+
+    for ch in original:
+        if ch.isdigit():
+            if digit_idx < len(digits):
+                formatted += digits[digit_idx]
+                digit_idx += 1
+            else:
+                formatted += "0"
+        else:
+            formatted += ch
+
+    return formatted
+
+def find_text_position(img, target):
+    img_cv = np.array(img)
+    img_gray = cv2.cvtColor(img_cv, cv2.COLOR_RGB2GRAY)
+    data = pytesseract.image_to_data(img_gray, output_type=pytesseract.Output.DICT)
+
+    for i in range(len(data['text'])):
+        text = data['text'][i]
+        if target.replace(" ", "") in text.replace(" ", ""):
+            x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
+            return (x, y, w, h)
+
+    return None
+
+def replace_phone_number(img, old_number, new_number):
+    img_cv = np.array(img)
+    pos = find_text_position(img, old_number)
+
+    if pos is None:
+        return img_cv, False
+
+    (x, y, w, h) = pos
+
+    # Estimate font size and color
+    font_size = int(h * 0.8)
+    color = img_cv[y+h//2, x+w//2].tolist()
+
+    # Draw white rectangle
+    cv2.rectangle(img_cv, (x, y), (x+w, y+h), (255, 255, 255), -1)
+
+    # Draw new text
+    img_pil = Image.fromarray(img_cv)
+    draw = ImageDraw.Draw(img_pil)
+
+    try:
+        font = ImageFont.truetype("arial.ttf", font_size)
+    except:
+        font = ImageFont.load_default()
+
+    draw.text((x, y), new_number, fill=tuple(color), font=font)
+    img_cv = np.array(img_pil)
+
+    return img_cv, True
+
+# Streamlit app
 
 uploaded_file = st.file_uploader("Upload an image (JPG, PNG)", type=["jpg", "jpeg", "png"])
 
-# --- Functions ---
-def enhance_image(image_pil):
-    image_pil = ImageEnhance.Contrast(image_pil).enhance(2)
-    image_pil = ImageEnhance.Sharpness(image_pil).enhance(2)
-    return image_pil
-
-def get_text_data(image):
-    data_results = []
-    for psm in [6, 11, 3, 4]:  # added psm 4 for better paragraph mode
-        custom_config = f'--oem 3 --psm {psm}'
-        data = pytesseract.image_to_data(image, config=custom_config, output_type=pytesseract.Output.DICT)
-        if any(text.strip() for text in data['text']):
-            data_results.append(data)
-    return data_results[0] if data_results else None
-
-def extract_numbers(data):
-    pattern = re.compile(
-        r'(\(?\+?\d{1,4}\)?[\s\.-]?\(?\d{1,4}\)?[\s\.-]?\d{2,5}[\s\.-]?\d{3,6}[\s\.-]?\d{0,5})'
-    )
-    numbers = []
-    boxes = []
-    for i, text in enumerate(data['text']):
-        clean = text.strip()
-        if pattern.fullmatch(clean):
-            numbers.append(clean)
-            boxes.append((clean, data['left'][i], data['top'][i], data['width'][i], data['height'][i]))
-    return numbers, boxes
-
-def get_average_color(image, x, y, w, h):
-    roi = image[y:y+h, x:x+w]
-    avg_color = cv2.mean(roi)[:3]
-    return tuple(int(c) for c in avg_color[::-1])  # BGR to RGB
-
-# --- Main App ---
 if uploaded_file:
-    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    cv_image = cv2.imdecode(file_bytes, 1)
-    image_pil = Image.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
-    enhanced = enhance_image(image_pil)
-    enhanced_cv = cv2.cvtColor(np.array(enhanced), cv2.COLOR_RGB2BGR)
+    image = load_image(uploaded_file)
+    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    ocr_data = get_text_data(enhanced)
-    if ocr_data:
-        phone_numbers, boxes = extract_numbers(ocr_data)
+    st.subheader("Step 1: Detect Phone Numbers")
+
+    method = st.radio("Choose OCR method:", ["Tesseract (fast)", "EasyOCR (more accurate)"])
+
+    if method == "Tesseract (fast)":
+        text = detect_with_tesseract(image)
     else:
-        phone_numbers, boxes = [], []
+        text = detect_with_easyocr(image)
 
-    if phone_numbers:
-        st.image(cv_image, caption="Original Image", use_column_width=True)
+    numbers = extract_phone_numbers(text)
 
-        selected_number = st.selectbox("Select phone number to replace", phone_numbers)
-        new_number = st.text_input("Enter the new number to replace with", value=selected_number)
+    if numbers:
+        st.success(f"Detected {len(numbers)} phone number(s).")
+        selected_number = st.selectbox("Select number to replace:", numbers)
+        new_number_raw = st.text_input("Enter new phone number:")
 
-        preview = cv_image.copy()
-        replaced = False
-        for number, x, y, w, h in boxes:
-            if number == selected_number:
-                # Inpaint old number
-                mask = np.zeros(preview.shape[:2], dtype=np.uint8)
-                cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
-                preview = cv2.inpaint(preview, mask, 3, cv2.INPAINT_TELEA)
+        if st.button("Replace Number"):
+            if new_number_raw.strip() == "":
+                st.error("Please enter a valid new number.")
+            else:
+                # Match format
+                new_number = match_format(selected_number, new_number_raw)
+                output_img, success = replace_phone_number(image, selected_number, new_number)
 
-                # Draw new number
-                avg_color = get_average_color(cv_image, x, y, w, h)
-                font_size = int(h * 1.2)
+                if success:
+                    st.image(output_img, caption="Modified Image", use_column_width=True)
+                    st.success(f"Phone number replaced: `{selected_number}` ➔ `{new_number}`")
 
-                img_pil = Image.fromarray(cv2.cvtColor(preview, cv2.COLOR_BGR2RGB))
-                draw = ImageDraw.Draw(img_pil)
-                try:
-                    font = ImageFont.truetype("arial.ttf", font_size)
-                except:
-                    font = ImageFont.load_default()
-                draw.text((x, y), new_number, fill=avg_color, font=font)
-
-                preview = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-                replaced = True
-                break
-
-        if replaced:
-            st.image(preview, caption="Updated Image with New Number", use_column_width=True)
-            if st.button("✅ Apply and Download"):
-                _, buffer = cv2.imencode(".png", preview)
-                st.download_button("📥 Download Updated Image", buffer.tobytes(), "updated_image.png", "image/png")
-        else:
-            st.warning("❌ Selected number could not be replaced. Try again.")
+                    output_pil = Image.fromarray(output_img)
+                    output_pil.save("output_advanced.png")
+                    with open("output_advanced.png", "rb") as file:
+                        st.download_button(
+                            label="Download Image",
+                            data=file,
+                            file_name="replaced_advanced.png",
+                            mime="image/png"
+                        )
+                else:
+                    st.error("Could not locate phone number position clearly.")
     else:
-        st.warning("❌ No phone numbers were detected. Try another image or clearer version.")
-else:
-    st.info("⬆️ Please upload an image to begin.")
-
+        st.error("No phone numbers were detected. Try another image or OCR method.")
